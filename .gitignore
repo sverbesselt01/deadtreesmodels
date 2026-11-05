@@ -1,2 +1,7 @@
 __pycache__
 data
+*.tif
+*.tif.aux.xml
+*.gpkg
+segformer_b5_full_epoch_100.safetensors
+*.safetensors

@@ -9,6 +9,7 @@ import torch
 from torch.utils.data import DataLoader
 from torchvision.transforms.functional import crop
 from tqdm import tqdm
+from safetensors.torch import load_file
 
 from common import *
 
@@ -37,8 +38,31 @@ class DeadwoodInference:
                 classes=1,
             ).to(memory_format=torch.channels_last)
 
-            model = torch.compile(model)
-            safetensors.torch.load_model(
+            #model = torch.compile(model)
+
+            def load_model2(model: torch.nn.Module, model_path: str, device: str = None):
+                if device is None:
+                    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+                model = model.to(device)
+
+                # Load raw tensors from safetensors
+                state_dict = load_file(model_path, device=str(device))
+
+                # Strip the '_orig_mod.' prefix
+                cleaned_state_dict = {
+                    (key[len("_orig_mod.") :] if key.startswith("_orig_mod.") else key): value
+                    for key, value in state_dict.items()
+                }
+
+                # Load into the model
+                model.load_state_dict(cleaned_state_dict)
+                model.eval()
+                return model
+
+
+            
+            load_model2(
                 model,
                 join(
                     str(Path(__file__).parent.parent),

@@ -3,7 +3,7 @@ import segmentation_models_pytorch as smp
 from torchvision.transforms import transforms
 import torch
 from torch.utils.data import DataLoader
-from unet_model import UNet
+#from unet_model import UNet
 from torchvision.transforms.functional import crop
 import os
 
@@ -14,13 +14,16 @@ import utm
 from safetensors.torch import load_model
 from shapely.affinity import affine_transform, translate
 from shapely.geometry import Polygon, MultiPolygon
+from safetensors.torch import load_file
 
 # DEADWOOD_MODEL_PATH = "/net/scratch/cmosig/model.safetensors"
 # DEADWOOD_MODEL_PATH = "/net/scratch/jmoehring/checkpoints/3d_18k_100e_vanilla_tversky_a01b09g2/fold_0_epoch_99/model.safetensors"
-DEADWOOD_MODEL_PATH = "/net/scratch/cmosig/experiment_dir_deadwood_segmentation/segformer_b5_oversample_newdata/fold_0_epoch_74/model.safetensors"
+#DEADWOOD_MODEL_PATH = "/net/scratch/cmosig/experiment_dir_deadwood_segmentation/segformer_b5_oversample_newdata/fold_0_epoch_74/model.safetensors"
+DEADWOOD_MODEL_PATH = "model/segformer_b5_full_epoch_100.safetensors"
 
 # pathtotile = sys.argv[1]    
-pathtotile = "/net/scratch/jmoehring/tiles/spain_20_09_2023_south_tejeda_1_ortho/0.08/1588_4484.tif"
+#pathtotile = "/net/scratch/jmoehring/tiles/spain_20_09_2023_south_tejeda_1_ortho/0.08/1588_4484.tif"
+pathtotile = "C:/Users/sebastiaan_verbessel/Downloads/tile.tif"
 # pathtotile = "/net/scratch/jmoehring/tiles/spain_20_09_2023_south_tejeda_1_ortho/0.08/1588_900.tif"
 
 # preferably use GPU
@@ -38,7 +41,29 @@ model = smp.Unet(
     in_channels=3,
     classes=1,
 ).to(memory_format=torch.channels_last)
-model = torch.compile(model)
+#model = torch.compile(model)
+
+
+
+def load_model(model: torch.nn.Module, model_path: str, device: str = None):
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    model = model.to(device)
+
+    # Load raw tensors from safetensors
+    state_dict = load_file(model_path, device=str(device))
+
+    # Strip the '_orig_mod.' prefix
+    cleaned_state_dict = {
+        (key[len("_orig_mod.") :] if key.startswith("_orig_mod.") else key): value
+        for key, value in state_dict.items()
+    }
+
+    # Load into the model
+    model.load_state_dict(cleaned_state_dict)
+    model.eval()
+    return model
 
 load_model(model, DEADWOOD_MODEL_PATH)
 model = model.to(memory_format=torch.channels_last, device=device)
@@ -48,14 +73,24 @@ model.eval()
 # load image patch 
 image = None
 with rasterio.open(pathtotile) as src:
-    image = src.read()
+    # Read only bands 1, 2, and 3 (RGB) # Forth band is the alpha band # image = src.read()
+    image = src.read([1, 2, 3])
 
 
     # Reshape the image tensor to have 3 channels
     image = image.transpose(1, 2, 0)
 
+    # If the raster data is uint16 or needs scaling to [0, 1]:
+    if image.dtype == np.uint16:
+        image = (image / 65535.0).astype(np.float32)
+
+    # If the raster data is uint8 or needs scaling to [0, 1]:
+    if image.dtype == np.uint8:
+        image = (image / 255.0).astype(np.float32)    
+
     image_transforms = transforms.Compose([
         transforms.ToTensor(),
+        transforms.Resize((1024, 1024), antialias=True),
         transforms.Normalize(
             mean=[0.485, 0.456, 0.406],
             std=[0.229, 0.224, 0.225],
