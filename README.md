@@ -5,3 +5,9 @@ Model weights: https://data2.deadtrees.earth/assets/v1/segformer_b5_full_epoch_1
 Tree cover (https://restor-foundation.github.io/tcd/dataset/) is not running atm. 
 
 Questions: clemens.mosig@uni-leipzig.de
+
+## Adaptations:
+* slight modifications of the infer_ortho.py and tileinference.py so it works on a windows computer.
+
+### Extra information:
+I used python 3.10.
